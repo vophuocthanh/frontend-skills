@@ -3,58 +3,67 @@
 > The ultimate production-ready AI coding ruleset for modern React, scalable architecture, strict TypeScript, and performance-first patterns.
 
 ## 🌟 Overview
-This repository provides a comprehensive, production-grade ruleset (Agent Skill) designed specifically for Frontend Engineers and AI Coding Assistants (like Cursor, Cline, GitHub Copilot, and Antigravity).
+This repository provides production-grade rulesets (Agent Skills) designed for Frontend Engineers and AI Coding Assistants (Cursor, Cline, GitHub Copilot, Antigravity).
 
-Instead of repeatedly prompting AI about file organization, state management, or performance optimization, you can simply load this skill into your project. The AI will automatically adopt a "Senior Frontend Engineer Mindset", ensuring:
-- **Performance-first:** Eliminating network waterfalls (`Promise.all`), optimizing bundle sizes (no barrel files).
-- **Clean Architecture:** Strict separation between Logic (Hooks) and UI (Components), colocating related state to prevent desync.
-- **Scalability:** Feature-Sliced Design (Domain-driven) with strict Public/Private module boundaries.
-- **Strict Typing:** Utilizing Zod for API Contracts & Forms, relying on Discriminated Unions instead of boolean flags.
+Load a skill into your project and the AI will automatically adopt a "Senior Frontend Engineer Mindset".
 
-## 🚀 Key Features (Included Rules)
-1. **Boundary Architecture:** Explicit separation between Server and Client code (`server-only` / `client-only`).
-2. **Logic-in-Hook:** Prohibits complex logic inside components; all business logic must reside in Custom Hooks.
-3. **Colocate Related State:** Prevents scattering tightly-coupled state across multiple hooks to avoid UI desync.
-4. **Composition over Configuration:** Encourages Compound Components over component monolithic blocks with dozens of boolean props.
-5. **API & Data Layer:** Enforces Zod Schemas for API responses. Never trust network data.
-6. **React Query / Caching:** Centralized Query Keys factory and a robust 3-layer caching strategy.
-7. **DX & Git Conventions:** Standardized folder structures (`kebab-case`), file naming (`PascalCase` for UI, `kebab-case` for logic).
+## 📦 Available Skills
 
-## 📦 Installation
+| Skill | Use Case | Size |
+|-------|----------|------|
+| `react-client-conversion-skills` | **Client-Side** — React hooks, state management, forms, styling, testing, a11y, performance | ~500 lines |
+| `nextjs-server-conversion-skills` | **Server-Side** — RSC, Server Actions, boundary architecture, caching, env management, security | ~400 lines |
 
-You don't need to clone the entire repository or manually copy-paste files. You can use the official `skills` CLI to pull this ruleset directly into your project's `.agents/skills` folder.
+### Which one should I use?
 
-Run the following command in the root directory of your target project:
+```text
+Client-side only (Vite, CRA, Next.js Pages Router)?
+  → Install react-client-conversion-skills
+
+Next.js App Router with RSC + Server Actions?
+  → Install both react-client-conversion-skills AND nextjs-server-conversion-skills
+```
+
+## 🚀 Installation
 
 ```bash
 npx skills add vophuocthanh/frontend-skills
 ```
 
-*(This command will instantly download and install the frontend engineering skill from this repository).*
-
-### 🛠 Quick Setup Alias (macOS/Linux Optional)
-To save time, you can create a bash alias to install this ruleset into any project with a single word.
-Open your `~/.zshrc` (or `~/.bashrc`) and add:
+### Install a specific skill only
 
 ```bash
-alias install-fe-skills="npx skills add vophuocthanh/frontend-skills && echo '✅ Frontend AI Skills installed successfully!'"
+# Client-side only
+npx skills add vophuocthanh/frontend-skills --skill react-client-conversion-skills
+
+# Server-side only
+npx skills add vophuocthanh/frontend-skills --skill nextjs-server-conversion-skills
 ```
-Run `source ~/.zshrc`. From now on, just type `install-fe-skills` in any new project.
+
+### 🛠 Quick Setup Alias (macOS/Linux)
+
+```bash
+alias install-fe-skills="npx skills add vophuocthanh/frontend-skills && echo '✅ Frontend AI Skills installed!'"
+```
 
 ## 🤖 Usage with AI Assistants
 
-### 1. Cursor / Cline (Recommended)
-The most powerful way to enforce these rules is to set them as your project's default system instructions:
-- Run the installation command above.
-- Copy the contents of the `SKILL.md` file (located in `.agents/skills/frontend-engineering-ruleset/`) and paste it into a `.cursorrules` (or `.clinerules`) file at the root of your project.
-- The AI will automatically read and apply these standards on every prompt.
+### Cursor / Cline
+- Copy the `SKILL.md` content into `.cursorrules` (or `.clinerules`) at your project root.
 
-### 2. Antigravity / Other AI Agents
-- After installation, the ruleset will be located at `.agents/skills/frontend-engineering-ruleset/`.
-- When prompting the AI, simply say:
-  > *"Please build feature X, and strictly follow the **frontend-engineering-ruleset**."*
-- Or use file mentions (depending on the editor):
-  > *"Create the XYZ component using the standards defined in `@[.agents/skills/frontend-engineering-ruleset/SKILL.md]`"*
+### Antigravity / Other AI Agents
+- Say: *"Follow the **react-client-conversion-skills** rules."*
+- Or mention: `@[.agents/skills/react-client-conversion-skills/SKILL.md]`
+
+## 📂 Repository Structure
+
+```text
+.agents/skills/
+├── react-client-conversion-skills/    # Client-Side Rendering
+│   └── SKILL.md
+└── nextjs-server-conversion-skills/   # Server-Side Rendering
+    └── SKILL.md
+```
 
 ---
 *Created and maintained by [vophuocthanh](https://github.com/vophuocthanh).*
