@@ -1,6 +1,6 @@
 ---
 name: react-client-mastery
-description: Production-ready AI coding ruleset for Next.js Client-Side Rendering (CSR) — React hooks, TypeScript, state management, styling, forms, testing, and performance patterns.
+description: Production-ready AI coding ruleset for Next.js Client-Side Rendering (CSR) — SOLID principles, React hooks, TypeScript, state management, styling, forms, testing, and performance patterns.
 ---
 
 # Next.js Client-Side Rendering (CSR) Ruleset
@@ -21,6 +21,153 @@ description: Production-ready AI coding ruleset for Next.js Client-Side Renderin
 * **DON'T** store URL-worthy state in `useState`.
 * **DO** debounce input events and throttle scroll events.
 * **DON'T** use barrel files (`index.ts` re-exports) for large libraries.
+* **DO** give every component/hook exactly one reason to change (SRP).
+* **DON'T** extend a component by adding `if (variant === ...)` branches (OCP).
+* **DO** depend on abstractions (props, interfaces, injected clients), not concrete modules (DIP).
+---
+
+## 🧱 SOLID Principles (React Edition)
+
+> SOLID applies to components, hooks, and modules — not just classes. These rules are the *reasoning layer* behind the patterns below.
+
+### S — Single Responsibility Principle
+* **Rule:** One component, one hook, one module = **one reason to change**. Rendering, business logic, and data fetching are three different reasons.
+* **Why:** A component that fetches, transforms, validates, and renders must be rewritten whenever *any* of those change — and can't be tested in isolation.
+* **Good:**
+  ```tsx
+  // api/user-api.ts        → changes when the endpoint changes
+  export async function fetchUsers(): Promise<User[]> { /* ... */ }
+
+  // hooks/use-user-list.ts → changes when business rules change
+  export function useUserList(query: string) {
+    const { data, isLoading } = useQuery({ queryKey: userKeys.lists(), queryFn: fetchUsers });
+    const users = useMemo(() => filterUsers(data ?? [], query), [data, query]);
+    return { users, isLoading };
+  }
+
+  // components/UserList.tsx → changes when the design changes
+  export function UserList({ query }: { query: string }) {
+    const { users, isLoading } = useUserList(query);
+    if (isLoading) return <UserListSkeleton />;
+    return <ul>{users.map(u => <UserCard key={u.id} user={u} />)}</ul>;
+  }
+  ```
+* **Bad:** A 300-line `UserList.tsx` containing `fetch()`, filtering, sorting, analytics, and JSX.
+* **Smell:** You describe the file with "and" — "it renders the table **and** exports CSV **and** handles pagination".
+
+### O — Open/Closed Principle
+* **Rule:** Components must be **open for extension, closed for modification**. Extend via `children`, render props, slots, and variant maps — never by editing the component to add another `if`.
+* **Why:** Every new use case that forces you to reopen a shared component risks breaking existing consumers.
+* **Good:**
+  ```tsx
+  // Extend by composition — DataTable never changes
+  <DataTable data={users}>
+    <DataTable.Toolbar><ExportButton /></DataTable.Toolbar>
+    <DataTable.Empty><EmptyState message="No users" /></DataTable.Empty>
+  </DataTable>
+
+  // Extend by variant map (cva) — add a variant, don't touch the render body
+  const button = cva('rounded font-medium', {
+    variants: { intent: { primary: '...', danger: '...', ghost: '...' } },
+  });
+  ```
+* **Bad:**
+  ```tsx
+  function Button({ isPrimary, isDanger, isGhost, isIconOnly }: Props) {
+    if (isPrimary) return <button className="bg-blue-600">...</button>;
+    if (isDanger) return <button className="bg-red-600">...</button>;
+    // 🔴 every new style = another branch inside the component
+  }
+  ```
+
+### L — Liskov Substitution Principle
+* **Rule:** A specialized component must be usable **anywhere its base is used**, without surprises. Wrappers must forward `ref`, `...rest` props, and standard event handlers.
+* **Why:** If `<PrimaryButton>` silently drops `onClick`, `disabled`, or `type="submit"`, it is not substitutable for `<button>` and will break inside forms and dialogs.
+* **Good:**
+  ```tsx
+  type ButtonProps = React.ComponentPropsWithoutRef<'button'> &
+    VariantProps<typeof button>;
+
+  export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+    function Button({ intent, className, ...rest }, ref) {
+      return <button ref={ref} className={button({ intent, className })} {...rest} />;
+    },
+  );
+  ```
+* **Bad:**
+  ```tsx
+  // 🔴 Drops ref, type, disabled, aria-*; breaks the moment it's used in a form
+  export function Button({ label, onClick }: { label: string; onClick: () => void }) {
+    return <button onClick={onClick}>{label}</button>;
+  }
+  ```
+* **Also applies to hooks:** every variant of a hook must return the **same shape**. `useUsers()` and `useArchivedUsers()` should both return `{ data, isLoading, error }` — never one returning an array and the other an object.
+
+### I — Interface Segregation Principle
+* **Rule:** Components must depend only on the props they actually use. Pass **narrow, specific props**, not whole god-objects "just in case".
+* **Why:** Passing the full `user` object into `<Avatar>` couples the avatar to the entire `User` type — a change to `User.billing` forces `Avatar` to recompile, retest, and re-render.
+* **Good:**
+  ```tsx
+  <Avatar src={user.avatarUrl} name={user.name} />
+
+  // Split fat prop interfaces by responsibility
+  interface Sortable { sortKey: string; onSort: (key: string) => void }
+  interface Selectable { selectedIds: string[]; onSelect: (id: string) => void }
+  type TableProps = Sortable & Selectable & { rows: Row[] };
+  ```
+* **Bad:**
+  ```tsx
+  <Avatar user={user} /> // 🔴 Avatar now depends on all 30 fields of User
+  <Table config={hugeConfigObject} /> // 🔴 one fat interface for 5 unrelated concerns
+  ```
+* **Also applies to stores:** select **slices**, not the whole store — `useSidebarStore(s => s.isOpen)`, never `useSidebarStore()`.
+
+### D — Dependency Inversion Principle
+* **Rule:** High-level components depend on **abstractions**, not concrete implementations. Inject dependencies (API client, storage, analytics, feature flags) via props, custom hooks, or Context — never import a concrete module deep inside a UI component.
+* **Why:** A component that imports `axios` directly cannot be tested, mocked, or reused with a different transport. The dependency arrow must point *away* from the UI.
+* **Good:**
+  ```tsx
+  // Abstraction (owned by the high-level module)
+  export interface AuthGateway {
+    login(input: LoginInput): Promise<Session>;
+  }
+
+  // Injection point
+  const AuthGatewayContext = createContext<AuthGateway | null>(null);
+  export function useAuthGateway(): AuthGateway {
+    const gateway = useContext(AuthGatewayContext);
+    if (!gateway) throw new Error('AuthGatewayProvider is missing');
+    return gateway;
+  }
+
+  // Consumer depends on the interface only
+  export function useLogin() {
+    const gateway = useAuthGateway();
+    return useMutation({ mutationFn: (input: LoginInput) => gateway.login(input) });
+  }
+
+  // Tests swap in a fake — no network, no msw needed for unit tests
+  <AuthGatewayContext.Provider value={fakeAuthGateway}>
+  ```
+* **Bad:**
+  ```tsx
+  export function LoginForm() {
+    async function onSubmit(data: LoginInput) {
+      await axios.post('https://api.example.com/login', data); // 🔴 UI welded to axios + URL
+      localStorage.setItem('token', '...');                    // 🔴 UI welded to storage
+    }
+  }
+  ```
+
+### SOLID → Pattern Map
+| Principle | Enforce it with |
+|---|---|
+| **S**RP | Logic-in-Hook / UI-in-Component, one feature folder per domain |
+| **O**CP | Compound Components, `children`/slots, `cva` variant maps |
+| **L**SP | `forwardRef` + `ComponentPropsWithoutRef` + `{...rest}` spread |
+| **I**SP | Narrow props, split prop interfaces, Zustand slice selectors |
+| **D**IP | Context-injected gateways, centralized typed API client, Zod at the boundary |
+
 ---
 
 ## ⚛️ React Component & Hook Patterns
@@ -567,8 +714,13 @@ description: Production-ready AI coding ruleset for Next.js Client-Side Renderin
 6. **Scattered Query Keys:** Use centralized key factory.
 7. **Unvalidated API Responses:** Never `as User` without runtime validation.
 8. **`console.log` in Production:** Use structured logging.
-9. **God Service Files:** Split by domain.
+9. **God Service Files:** Split by domain. *(violates SRP)*
 10. **Missing Error Boundaries:** Causes white-screen crashes.
+11. **Variant `if`-Chains:** Adding a branch inside a shared component for each new style. *(violates OCP — use `cva` or composition)*
+12. **Leaky Wrappers:** Custom `<Button>`/`<Input>` that swallow `ref`, `disabled`, `type`, or `aria-*`. *(violates LSP)*
+13. **God-Object Props:** `<Avatar user={user} />` instead of `<Avatar src name />`. *(violates ISP)*
+14. **Hard-Wired Dependencies:** Importing `axios`/`localStorage`/SDKs directly inside a UI component. *(violates DIP — inject via Context)*
+15. **Whole-Store Subscriptions:** `useStore()` without a selector, re-rendering on every unrelated change. *(violates ISP)*
 
 ---
 
@@ -581,6 +733,11 @@ description: Production-ready AI coding ruleset for Next.js Client-Side Renderin
 - [ ] **Mutations:** Correct query key invalidation? Optimistic UI where appropriate?
 - [ ] **A11y:** Semantic HTML? Focus states? Color contrast?
 - [ ] **Clean Code:** Components small, composable, free of boolean prop explosions?
+- [ ] **SRP:** Can each new/changed file be described without the word "and"?
+- [ ] **OCP:** Was a shared component extended by composition/variants rather than a new `if` branch?
+- [ ] **LSP:** Do wrapper components forward `ref` and spread `...rest`? Do hook variants return the same shape?
+- [ ] **ISP:** Are props narrow (`src`, `name`) instead of god-objects (`user`)? Are store reads done with selectors?
+- [ ] **DIP:** Do UI components import `axios`/`localStorage`/SDKs directly, or receive them through an injected abstraction?
 - [ ] **Git:** Conventional Commits? PR focused (<400 lines)?
 - [ ] **Testing:** Integration tests for user flows? Mocks at network boundary?
 

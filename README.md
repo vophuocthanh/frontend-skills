@@ -55,14 +55,38 @@ alias install-fe-skills="npx skills add vophuocthanh/frontend-skills && echo '�
 - Say: *"Follow the **react-client-conversion-skills** rules."*
 - Or mention: `@[.agents/skills/react-client-conversion-skills/SKILL.md]`
 
+## 🎯 Prompt Library
+
+The skills define **the rules**. The [`prompts/`](prompts/README.md) folder turns them into **executable tasks** — 14 detailed, copy-paste prompts with placeholders, stop-gates, and a Definition of Done.
+
+| Group | Prompts |
+|---|---|
+| **Frontend** | UI component · feature page · form · SOLID refactor · performance audit · testing |
+| **Frontend + Backend** | API contract · REST integration · RSC data fetching · Server Action CRUD · auth flow · full-stack slice |
+| **Review** | code review · debug FE/BE integration |
+
+Start at [`prompts/README.md`](prompts/README.md) for the index and the typical flows.
+🇻🇳 Bản tiếng Việt đầy đủ: [`prompts/vi/README.md`](prompts/vi/README.md)
+
 ## 📂 Repository Structure
 
 ```text
 .agents/skills/
-├── react-client-conversion-skills/    # Client-Side Rendering
+├── next-client-conversion-skills/     # Client-Side Rendering + SOLID
 │   └── SKILL.md
-└── nextjs-server-conversion-skills/   # Server-Side Rendering
+└── nextjs-server-conversion-skills/   # Server-Side Rendering + SOLID
     └── SKILL.md
+
+prompts/
+├── README.md                          # index + how to use + typical flows
+├── fe/                                # 01-06  Frontend tasks
+├── fullstack/                         # 07-12  FE + BE (API integration)
+├── review/                            # 13-14  Review & debug
+└── vi/                                # 🇻🇳 Vietnamese translation (same 14 prompts)
+    ├── README.md
+    ├── fe/
+    ├── fullstack/
+    └── review/
 ```
 
 ---

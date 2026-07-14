@@ -1,6 +1,6 @@
 ---
 name: nextjs-server-mastery
-description: Production-ready AI coding ruleset for Next.js Server-Side Rendering (SSR) — React Server Components, Server Actions, boundary architecture, caching, environment management, and server performance patterns.
+description: Production-ready AI coding ruleset for Next.js Server-Side Rendering (SSR) — SOLID principles, React Server Components, Server Actions, boundary architecture, caching, environment management, and server performance patterns.
 ---
 
 # Next.js Server-Side Rendering (SSR) Ruleset
@@ -21,6 +21,165 @@ description: Production-ready AI coding ruleset for Next.js Server-Side Renderin
 * **DON'T** read static files inside request handlers (hoist to module level).
 * **DO** prefix client-safe env vars with `NEXT_PUBLIC_`.
 * **DON'T** use `process.env.SECRET` inside client components.
+* **DO** keep Server Actions thin: auth → validate → delegate to a use case (SRP).
+* **DON'T** put Prisma/SQL queries directly inside pages or actions (DIP — go through a repository).
+* **DO** return the same result shape from every Server Action (LSP).
+
+---
+
+## 🧱 SOLID Principles (Server Edition)
+
+> On the server, SOLID is what keeps route handlers, Server Actions, and RSC pages from turning into god-functions that do auth, validation, SQL, email, and rendering at once. The dependency arrow must always point **inward**: `page/action → use case → repository interface`, never outward to Prisma or Stripe.
+
+### S — Single Responsibility Principle
+* **Rule:** A Server Action does exactly four things in order — **authenticate, validate, delegate, revalidate**. Business rules, SQL, and side effects (email, billing) live in separate modules.
+* **Why:** An action that inlines SQL + email + Stripe cannot be unit-tested, reused from a route handler or a cron job, and must be rewritten whenever *any* of those change.
+* **Good:**
+  ```tsx
+  // actions/user-actions.ts — thin orchestration only
+  'use server';
+  import { createUserUseCase } from '@/lib/server/use-cases/create-user';
+
+  export async function createUser(formData: FormData) {
+    const session = await getSession();                       // 1. authenticate
+    if (!session?.isAdmin) throw new Error('Unauthorized');
+
+    const parsed = CreateUserSchema.safeParse(Object.fromEntries(formData)); // 2. validate
+    if (!parsed.success) return { ok: false, fieldErrors: parsed.error.flatten().fieldErrors };
+
+    const user = await createUserUseCase(parsed.data);        // 3. delegate
+    revalidatePath('/users');                                 // 4. revalidate
+    return { ok: true, data: { id: user.id } };
+  }
+
+  // lib/server/use-cases/create-user.ts — business rules, no HTTP/FormData knowledge
+  import 'server-only';
+  export async function createUserUseCase(input: CreateUserInput) {
+    if (await userRepo.existsByEmail(input.email)) throw new ConflictError('Email taken');
+    const user = await userRepo.create(input);
+    await mailer.sendWelcome(user.email);
+    return user;
+  }
+  ```
+* **Bad:** One 150-line `createUser` action containing `db.$transaction`, raw SQL, `resend.emails.send()`, Stripe customer creation, and cache revalidation.
+* **Smell:** The action imports `db`, `stripe`, and `resend` all at once.
+
+### O — Open/Closed Principle
+* **Rule:** Extend server behavior by **wrapping/composing** (higher-order actions, middleware, strategy maps), not by adding another `if (provider === ...)` branch inside an existing handler.
+* **Why:** Every new payment provider or auth method that forces you to reopen a shared handler risks breaking the flows already in production.
+* **Good:**
+  ```tsx
+  // Cross-cutting concerns composed, not copy-pasted into every action
+  export const deleteUser = withAuth({ role: 'admin' })(
+    withRateLimit({ limit: 5, window: '1 m' })(
+      withValidation(DeleteUserSchema)(async (input, ctx) => {
+        await userRepo.delete(input.id);
+        revalidatePath('/users');
+        return { ok: true };
+      }),
+    ),
+  );
+
+  // Strategy map — add a provider by adding an entry, not by editing the handler
+  const paymentProviders: Record<Provider, PaymentGateway> = {
+    stripe: stripeGateway,
+    paypal: paypalGateway, // ✅ new provider = new entry, zero edits above
+  };
+  export async function charge(provider: Provider, amount: Money) {
+    return paymentProviders[provider].charge(amount);
+  }
+  ```
+* **Bad:**
+  ```tsx
+  export async function charge(provider: string, amount: number) {
+    if (provider === 'stripe') { /* ... */ }
+    else if (provider === 'paypal') { /* ... */ } // 🔴 reopened for every provider
+  }
+  ```
+
+### L — Liskov Substitution Principle
+* **Rule:** Every implementation of a server contract must be **interchangeable**. All Server Actions return the same discriminated result shape; every repository implementation (Postgres, in-memory fake, mock) honors the same contract — including how it fails.
+* **Why:** If `updateUser` returns `{ error }` while `createUser` throws, and the in-memory test repo returns `null` where Prisma throws, then `useActionState` and your tests are lying to you.
+* **Good:**
+  ```tsx
+  // One result contract for ALL Server Actions
+  export type ActionResult<T> =
+    | { ok: true; data: T }
+    | { ok: false; fieldErrors?: Record<string, string[]>; message?: string };
+
+  // Every repo impl behaves identically — same return type, same error type
+  export interface UserRepository {
+    findById(id: string): Promise<User | null>;   // ← null when missing, NEVER throws
+    create(input: CreateUserInput): Promise<User>; // ← throws ConflictError on duplicate
+  }
+  export const prismaUserRepo: UserRepository = { /* ... */ };
+  export const fakeUserRepo: UserRepository = { /* same contract, in-memory */ };
+  ```
+* **Bad:** `prismaUserRepo.findById()` throws on not-found while `fakeUserRepo.findById()` returns `null` — tests pass, production 500s.
+
+### I — Interface Segregation Principle
+* **Rule:** Consumers depend only on what they use. **Select columns, not tables**; pass **fields, not DB models** across the RSC boundary; split fat service interfaces by use case.
+* **Why:** `<UserProfile user={user} />` serializes 50 DB fields — including `passwordHash` and `stripeCustomerId` — into the HTML payload sent to the browser. This is both a bundle-size problem and a **data-leak** problem.
+* **Good:**
+  ```tsx
+  // Select only what the view needs
+  const user = await db.user.findUnique({
+    where: { id },
+    select: { id: true, name: true, avatarUrl: true }, // ✅ no passwordHash in the payload
+  });
+  return <UserProfile name={user.name} avatarUrl={user.avatarUrl} />;
+
+  // Split fat services by consumer
+  interface UserReader { findById(id: string): Promise<User | null> }
+  interface UserWriter { create(input: CreateUserInput): Promise<User> }
+  // A read-only RSC page depends on UserReader alone.
+  ```
+* **Bad:** `const user = await db.user.findUnique({ where: { id } });` then `<UserProfile user={user} />` — the whole row, secrets included, crosses the boundary.
+
+### D — Dependency Inversion Principle
+* **Rule:** Pages, actions, and use cases depend on **interfaces you own** (`UserRepository`, `Mailer`, `PaymentGateway`), not on Prisma, Resend, or Stripe directly. The concrete adapter is chosen at the composition root.
+* **Why:** Business logic coupled to Prisma cannot be tested without a database, and swapping the ORM/vendor means rewriting every call site.
+* **Good:**
+  ```tsx
+  // lib/server/ports/mailer.ts — abstraction owned by the high-level module
+  import 'server-only';
+  export interface Mailer {
+    sendWelcome(email: string): Promise<void>;
+  }
+
+  // lib/server/adapters/resend-mailer.ts — low-level detail depends on the abstraction
+  export const resendMailer: Mailer = {
+    async sendWelcome(email) { await resend.emails.send({ /* ... */ }); },
+  };
+
+  // lib/server/container.ts — composition root: the ONLY place that knows the concretes
+  export const mailer: Mailer = resendMailer;
+  export const userRepo: UserRepository = prismaUserRepo;
+
+  // Use case depends on the interface only → unit-testable with fakes, no DB, no network
+  export async function createUserUseCase(input: CreateUserInput, deps = { userRepo, mailer }) {
+    const user = await deps.userRepo.create(input);
+    await deps.mailer.sendWelcome(user.email);
+    return user;
+  }
+  ```
+* **Bad:**
+  ```tsx
+  // 🔴 Page welded to Prisma + Resend: untestable, unswappable
+  export default async function Page() {
+    const users = await db.user.findMany();
+    await resend.emails.send({ /* ... */ });
+  }
+  ```
+
+### SOLID → Pattern Map (Server)
+| Principle | Enforce it with |
+|---|---|
+| **S**RP | Thin Server Actions (auth → validate → delegate → revalidate), separate use-case layer |
+| **O**CP | Higher-order action wrappers (`withAuth`, `withRateLimit`), strategy maps over `if`-chains |
+| **L**SP | One `ActionResult<T>` contract; repository impls with identical success **and** failure behavior |
+| **I**SP | Prisma `select`, primitives across the RSC boundary, reader/writer interface split |
+| **D**IP | Ports + adapters, `import 'server-only'` on ports, single composition root |
 
 ---
 
@@ -427,6 +586,11 @@ description: Production-ready AI coding ruleset for Next.js Server-Side Renderin
 8. **`console.log` in Server Code:** Using unstructured logging that's unsearchable in production.
 9. **Exposing `process.env.SECRET` Client-Side:** Forgetting `NEXT_PUBLIC_` prefix rules.
 10. **No Env Validation:** Deploying without checking required env vars, crashing at runtime.
+11. **Fat Server Actions:** One action doing auth + SQL + email + Stripe + revalidation. *(violates SRP — delegate to a use case)*
+12. **Provider `if`-Chains:** `if (provider === 'stripe') ... else if (provider === 'paypal')`. *(violates OCP — use a strategy map)*
+13. **Inconsistent Action Contracts:** One action throws, another returns `{ error }`, a third returns `null`. *(violates LSP — use one `ActionResult<T>`)*
+14. **Leaking Whole DB Rows:** `<Profile user={user} />` shipping `passwordHash` across the RSC boundary. *(violates ISP — use `select` + primitives)*
+15. **ORM/SDK Welded Into Pages:** Importing `db`/`stripe`/`resend` directly in pages and actions. *(violates DIP — go through ports + adapters)*
 
 ---
 
@@ -442,6 +606,11 @@ description: Production-ready AI coding ruleset for Next.js Server-Side Renderin
 - [ ] **Env:** New env vars documented? Validated at startup? No `NEXT_PUBLIC_` leak of secrets?
 - [ ] **Security:** Server Actions rate-limited where needed? CSP headers configured?
 - [ ] **Logging:** Structured logging used? Error tracking integrated?
+- [ ] **SRP:** Are Server Actions thin (auth → validate → delegate → revalidate), with business rules in a use case?
+- [ ] **OCP:** Was a new provider/variant added via a strategy map or wrapper, not a new `if` branch in a shared handler?
+- [ ] **LSP:** Do all Server Actions return the same `ActionResult<T>` shape? Do fake and real repos fail the same way?
+- [ ] **ISP:** Does every query `select` only needed columns? Do only primitives cross the RSC boundary?
+- [ ] **DIP:** Do pages/actions import `db`/`stripe`/`resend` directly, or depend on a port resolved at the composition root?
 
 ### Common Server-Side Mistakes
 - Forgetting to authenticate inside Server Actions (relying only on middleware).
