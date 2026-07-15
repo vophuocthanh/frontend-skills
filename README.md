@@ -13,6 +13,7 @@ Load a skill into your project and the AI will automatically adopt a "Senior Fro
 |-------|----------|------|
 | `react-client-conversion-skills` | **Client-Side** — React hooks, state management, forms, styling, testing, a11y, performance | ~500 lines |
 | `nextjs-server-conversion-skills` | **Server-Side** — RSC, Server Actions, boundary architecture, caching, env management, security | ~400 lines |
+| `frontend-prompt-library` | **Executable tasks** — 14 copy-paste prompts (+ filled examples, 🇻🇳 VN) that operationalize the two rulesets | 14 prompts |
 
 ### Which one should I use?
 
@@ -38,6 +39,9 @@ npx skills add vophuocthanh/frontend-skills --skill react-client-conversion-skil
 
 # Server-side only
 npx skills add vophuocthanh/frontend-skills --skill nextjs-server-conversion-skills
+
+# Prompt library only (14 executable prompts + examples)
+npx skills add vophuocthanh/frontend-skills --skill frontend-prompt-library
 ```
 
 ### 🛠 Quick Setup Alias (macOS/Linux)
@@ -57,7 +61,7 @@ alias install-fe-skills="npx skills add vophuocthanh/frontend-skills && echo '�
 
 ## 🎯 Prompt Library
 
-The skills define **the rules**. The [`prompts/`](prompts/README.md) folder turns them into **executable tasks** — 14 detailed, copy-paste prompts with placeholders, stop-gates, and a Definition of Done.
+The skills define **the rules**. The `frontend-prompt-library` skill turns them into **executable tasks** — 14 detailed, copy-paste prompts with placeholders, stop-gates, and a Definition of Done.
 
 | Group | Prompts |
 |---|---|
@@ -65,8 +69,8 @@ The skills define **the rules**. The [`prompts/`](prompts/README.md) folder turn
 | **Frontend + Backend** | API contract · REST integration · RSC data fetching · Server Action CRUD · auth flow · full-stack slice |
 | **Review** | code review · debug FE/BE integration |
 
-Start at [`prompts/README.md`](prompts/README.md) for the index and the typical flows.
-🇻🇳 Bản tiếng Việt đầy đủ: [`prompts/vi/README.md`](prompts/vi/README.md)
+Start at [`frontend-prompt-library/README.md`](.agents/skills/frontend-prompt-library/README.md) for the index and the typical flows.
+🇻🇳 Bản tiếng Việt đầy đủ: [`frontend-prompt-library/vi/README.md`](.agents/skills/frontend-prompt-library/vi/README.md)
 
 ## 📂 Repository Structure
 
@@ -74,19 +78,19 @@ Start at [`prompts/README.md`](prompts/README.md) for the index and the typical 
 .agents/skills/
 ├── next-client-conversion-skills/     # Client-Side Rendering + SOLID
 │   └── SKILL.md
-└── nextjs-server-conversion-skills/   # Server-Side Rendering + SOLID
-    └── SKILL.md
-
-prompts/
-├── README.md                          # index + how to use + typical flows
-├── fe/                                # 01-06  Frontend tasks
-├── fullstack/                         # 07-12  FE + BE (API integration)
-├── review/                            # 13-14  Review & debug
-└── vi/                                # 🇻🇳 Vietnamese translation (same 14 prompts)
-    ├── README.md
-    ├── fe/
-    ├── fullstack/
-    └── review/
+├── nextjs-server-conversion-skills/   # Server-Side Rendering + SOLID
+│   └── SKILL.md
+└── frontend-prompt-library/           # 14 executable prompts (travels with the skill)
+    ├── SKILL.md                       # skill entry + index
+    ├── README.md                      # full index + how to use + typical flows
+    ├── fe/                            # 01-06  Frontend tasks
+    ├── fullstack/                     # 07-12  FE + BE (API integration)
+    ├── review/                        # 13-14  Review & debug
+    └── vi/                            # 🇻🇳 Vietnamese translation (same 14 prompts)
+        ├── README.md
+        ├── fe/
+        ├── fullstack/
+        └── review/
 ```
 
 ---
